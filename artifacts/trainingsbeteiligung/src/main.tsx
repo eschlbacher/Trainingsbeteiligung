@@ -19,5 +19,9 @@ createRoot(document.getElementById('root')!, {
 );
 
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(console.error));
+  window.addEventListener('load', () =>
+    navigator.serviceWorker
+      .register(`${import.meta.env.BASE_URL}sw.js`)
+      .catch(console.error),
+  );
 }
