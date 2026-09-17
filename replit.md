@@ -1,6 +1,6 @@
-# [Project name]
+# Trainingsbeteiligung
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Eine schlanke, mobilfreundliche App zur Erfassung und Auswertung der Trainingsbeteiligung mehrerer Fußballmannschaften.
 
 ## Run & Operate
 
@@ -30,7 +30,10 @@ _Populate as you build — non-obvious choices a reader couldn't infer from the 
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Verwaltet Mannschaften, Saisons und Spieler mit individuellen Aktivzeiträumen.
+- Erfasst Trainingseinheiten schnell, wobei aktive Spieler standardmäßig anwesend sind.
+- Berechnet Team- und Spielerquoten, Ranglisten und unterstützt CSV-Export und Saisonarchive.
+- Speichert alle Daten lokal im Browser; die App ist für die Nutzung durch eine Person ausgelegt.
 
 ## User preferences
 

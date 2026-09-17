@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Trainingsbeteiligung"
+description = "Eine schlanke, mobilfreundliche Web-App für Fußballtrainer zur Verwaltung mehrerer Mannschaften, Saisons, Spieler und Trainingseinheiten. Sie ermöglicht besonders schnelle Anwesenheitserfassung, automatische Beteiligungsquoten, Ranglisten, Saisonarchive und CSV-Exporte."
+version = "1.0.0"
+id = "artifacts/trainingsbeteiligung"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20659
+
+[services.development]
+run = "pnpm --filter @workspace/trainingsbeteiligung run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/trainingsbeteiligung", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/trainingsbeteiligung/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20659"
+BASE_PATH = "/"
