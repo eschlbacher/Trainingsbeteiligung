@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Activity, Archive, BarChart3, CalendarDays, ChevronLeft, ChevronRight,
-  Download, Menu, Plus, Settings, Shield, Trash2, Users, X,
+  Download, Menu, Plus, Settings, Shield, Trash2, Users, X, Shuffle,
 } from 'lucide-react';
 
 type Status = 'present' | 'excused' | 'unexcused' | 'injured';
@@ -60,9 +60,10 @@ function App() {
   const [data, setData] = usePersistentData();
   const [view, setView] = useState<View>('dashboard');
   const [mobileNav, setMobileNav] = useState(false);
-  const [modal, setModal] = useState<'training'|'player'|'team'|'settings'|null>(null);
+  const [modal, setModal] = useState<'training'|'player'|'team'|'settings'|'teamBuilder'|null>(null);
   const [trainingDate, setTrainingDate] = useState('');
   const [editingTraining, setEditingTraining] = useState<Training | null>(null);
+  const [teamBuilderTraining, setTeamBuilderTraining] = useState<Training | null>(null);
   const [toast, setToast] = useState('');
   const team = data.teams.find(t => t.id === data.selectedTeamId) ?? data.teams[0];
   const notify = (s: string) => { setToast(s); setTimeout(() => setToast(''), 2500); };
@@ -94,7 +95,8 @@ function App() {
         </div>
       </main>
       <button className="fab" onClick={()=>openTraining(iso(new Date()))}><Plus/> <span>Training</span></button>
-      {modal==='training' && <TrainingModal team={team} date={trainingDate} training={editingTraining} close={()=>setModal(null)} save={tr=>{updateTeam(t=>({...t,trainings: editingTraining?t.trainings.map(x=>x.id===tr.id?tr:x):[...t.trainings,tr]}));setModal(null);notify(editingTraining?'Training aktualisiert':'Training gespeichert');}} remove={editingTraining?()=>{if(confirm('Training wirklich löschen?')){updateTeam(t=>({...t,trainings:t.trainings.filter(x=>x.id!==editingTraining.id)}));setModal(null);notify('Training gelöscht');}}:undefined}/>}
+      {modal==='training' && <TrainingModal team={team} date={trainingDate} training={editingTraining} close={()=>setModal(null)} save={tr=>{updateTeam(t=>({...t,trainings: editingTraining?t.trainings.map(x=>x.id===tr.id?tr:x):[...t.trainings,tr]}));setModal(null);notify(editingTraining?'Training aktualisiert':'Training gespeichert');}} remove={editingTraining?()=>{if(confirm('Training wirklich löschen?')){updateTeam(t=>({...t,trainings:t.trainings.filter(x=>x.id!==editingTraining.id)}));setModal(null);notify('Training gelöscht');}}:undefined} onTeams={()=>{const tr=editingTraining??{id:'draft',date:trainingDate,note:'',attendance:{}};setTeamBuilderTraining(tr);setModal('teamBuilder')}}/>}
+      {modal==='teamBuilder' && teamBuilderTraining && <TeamBuilder team={team} training={teamBuilderTraining} close={()=>setModal(null)}/>}
       {modal==='player' && <PlayerModal team={team} close={()=>setModal(null)} save={p=>{updateTeam(t=>({...t,players:[...t.players,p]}));setModal(null);notify('Spieler hinzugefügt');}}/>}
       {modal==='settings' && <SettingsModal team={team} data={data} close={()=>setModal(null)} updateTeam={updateTeam} setData={setData} notify={notify}/>}
       {toast && <div className="toast">{toast}</div>}
@@ -131,11 +133,24 @@ function PlayersView({team,onAdd,updateTeam,notify}:{team:Team;onAdd:()=>void;up
 }
 function Ranking({team}:{team:Team}){const [sort,setSort]=useState<'rate'|'name'|'actual'>('rate');const rows=team.players.map(p=>({p,...playerStats(team,p)})).sort((a,b)=>sort==='name'?a.p.name.localeCompare(b.p.name):b[sort]-a[sort]);return <section className="panel"><div className="panel-head"><div><h3>Spieler-Rangliste</h3><p>Berücksichtigt nur Einheiten innerhalb des Aktivzeitraums</p></div><select value={sort} onChange={e=>setSort(e.target.value as typeof sort)}><option value="rate">Nach Quote</option><option value="actual">Nach Teilnahmen</option><option value="name">Nach Name</option></select></div><div className="table-wrap"><table><thead><tr><th>RANG</th><th>SPIELER</th><th>MÖGLICH</th><th>TEILNAHMEN</th><th>QUOTE</th></tr></thead><tbody>{rows.map((r,i)=><tr key={r.p.id}><td><span className={`rank ${i<3?'top':''}`}>{i+1}</span></td><td><strong>{r.p.name}</strong></td><td>{r.possible}</td><td>{r.actual}</td><td><div className="quote-cell"><strong>{r.rate.toFixed(1).replace('.',',')} %</strong><div><i style={{width:`${r.rate}%`}}/></div></div></td></tr>)}</tbody></table></div></section>}
 
-function TrainingModal({team,date,training,close,save,remove}:{team:Team;date:string;training:Training|null;close:()=>void;save:(t:Training)=>void;remove?:()=>void}) {
+function TrainingModal({team,date,training,close,save,remove,onTeams}:{team:Team;date:string;training:Training|null;close:()=>void;save:(t:Training)=>void;remove?:()=>void;onTeams:()=>void}) {
   const active=team.players.filter(p=>activeOn(p,date)).sort((a,b)=>a.name.localeCompare(b.name));
   const [attendance,setAttendance]=useState<Record<string,Status>>(()=>Object.fromEntries(active.map(p=>[p.id,training?.attendance[p.id]??'present'])));
   const [note,setNote]=useState(training?.note??''); const present=active.filter(p=>attendance[p.id]==='present').length;
-  return <div className="modal-wrap"><div className="modal wide"><div className="modal-head"><div><span>{training?'TRAINING BEARBEITEN':'NEUES TRAINING'}</span><h2>{fmt(date)}</h2></div><button className="icon-btn" onClick={close}><X/></button></div><div className="attendance-summary"><div><strong>{present}</strong><span>von {active.length} anwesend</span></div><div className="big-rate">{active.length?Math.round(present/active.length*100):0} %</div></div><div className="hint">Alle Spieler sind zunächst anwesend. Ändere nur die Abwesenden.</div><div className="status-list">{active.map(p=><div className="status-row" key={p.id}><strong>{p.name}</strong><div>{([['present','Anwesend'],['excused','Entschuldigt'],['unexcused','Unentsch.'],['injured','Verletzt']] as [Status,string][]).map(([v,l])=><button key={v} className={`${v} ${attendance[p.id]===v?'selected':''}`} onClick={()=>setAttendance(a=>({...a,[p.id]:v}))}>{l}</button>)}</div></div>)}</div><label className="note-label">Notiz (optional)<textarea maxLength={160} value={note} onChange={e=>setNote(e.target.value)} placeholder="z. B. Schwerpunkt, Besonderheiten …"/></label><div className="modal-actions">{remove&&<button className="delete" onClick={remove}><Trash2/> Löschen</button>}<span/><button className="secondary" onClick={close}>Abbrechen</button><button className="primary" onClick={()=>save({id:training?.id??uid(),date,note,attendance})}>Training speichern</button></div></div></div>
+  return <div className="modal-wrap"><div className="modal wide"><div className="modal-head"><div><span>{training?'TRAINING BEARBEITEN':'NEUES TRAINING'}</span><h2>{fmt(date)}</h2></div><button className="icon-btn" onClick={close}><X/></button></div><div className="attendance-summary"><div><strong>{present}</strong><span>von {active.length} anwesend</span></div><div className="big-rate">{active.length?Math.round(present/active.length*100):0} %</div></div><div className="hint">Alle Spieler sind zunächst anwesend. Ändere nur die Abwesenden.</div><div className="status-list">{active.map(p=><div className="status-row" key={p.id}><strong>{p.name}</strong><div>{([['present','Anwesend'],['excused','Entschuldigt'],['unexcused','Unentsch.'],['injured','Verletzt']] as [Status,string][]).map(([v,l])=><button key={v} className={`${v} ${attendance[p.id]===v?'selected':''}`} onClick={()=>setAttendance(a=>({...a,[p.id]:v}))}>{l}</button>)}</div></div>)}</div><label className="note-label">Notiz (optional)<textarea maxLength={160} value={note} onChange={e=>setNote(e.target.value)} placeholder="z. B. Schwerpunkt, Besonderheiten …"/></label><div className="modal-actions"><button className="secondary" onClick={onTeams}><Shuffle size={18}/> Teams zusammenstellen</button>{remove&&<button className="delete" onClick={remove}><Trash2/> Löschen</button>}<span/><button className="secondary" onClick={close}>Abbrechen</button><button className="primary" onClick={()=>save({id:training?.id??uid(),date,note,attendance})}>Training speichern</button></div></div></div>
+}
+function TeamBuilder({team,training,close}:{team:Team;training:Training;close:()=>void}) {
+  const present=team.players.filter(p=>activeOn(p,training.date)&&(training.attendance[p.id]??'present')==='present').sort((a,b)=>a.name.localeCompare(b.name));
+  const [count,setCount]=useState<2|3>(2);
+  const [groups,setGroups]=useState<Record<string,number>>(()=>Object.fromEntries(present.map((p,i)=>[p.id,i%2])));
+  const assign=(id:string,n:number)=>setGroups(g=>({...g,[id]:n}));
+  const rebalance=(n:2|3)=>{setCount(n);setGroups(Object.fromEntries(present.map((p,i)=>[p.id,i%n])))};
+  const randomize=()=>{const a=[...present].sort(()=>Math.random()-.5);setGroups(Object.fromEntries(a.map((p,i)=>[p.id,i%count])))};
+  return <div className="modal-wrap"><div className="modal wide team-builder"><div className="modal-head"><div><span>SPIELFORM</span><h2>Teams zusammenstellen</h2><p>{fmt(training.date)} · {present.length} anwesende Spieler</p></div><button className="icon-btn" onClick={close}><X/></button></div>
+    <div className="team-tools"><div><button className={count===2?'primary':'secondary'} onClick={()=>rebalance(2)}>2 Teams</button><button className={count===3?'primary':'secondary'} onClick={()=>rebalance(3)}>3 Teams</button></div><button className="secondary" onClick={randomize}><Shuffle size={18}/> Neu mischen</button></div>
+    <p className="hint">Spieler ziehen oder auf dem Handy antippen, um ihn ins nächste Team zu verschieben.</p>
+    <div className={`team-columns cols-${count}`}>{Array.from({length:count},(_,n)=><div className="team-box" key={n} onDragOver={e=>e.preventDefault()} onDrop={e=>assign(e.dataTransfer.getData('text/player'),n)}><div className="team-box-head"><strong>Team {n+1}</strong><span>{present.filter(p=>groups[p.id]===n).length} Spieler</span></div>{present.filter(p=>groups[p.id]===n).map(p=><button draggable className="player-chip" key={p.id} onDragStart={e=>e.dataTransfer.setData('text/player',p.id)} onClick={()=>assign(p.id,(n+1)%count)}><Users size={16}/>{p.name}<ChevronRight size={16}/></button>)}</div>)}</div>
+    <div className="modal-actions"><span/><button className="primary" onClick={close}>Fertig</button></div></div></div>
 }
 function PlayerModal({team,close,save}:{team:Team;close:()=>void;save:(p:Player)=>void}){const[name,setName]=useState(''),[from,setFrom]=useState(team.start),[to,setTo]=useState(team.end);return <div className="modal-wrap"><div className="modal small"><div className="modal-head"><h2>Spieler hinzufügen</h2><button className="icon-btn" onClick={close}><X/></button></div><div className="form"><label>Name<input autoFocus value={name} onChange={e=>setName(e.target.value)} placeholder="Vor- und Nachname"/></label><div className="form-row"><label>Aktiv von<input type="date" value={from} onChange={e=>setFrom(e.target.value)}/></label><label>Aktiv bis<input type="date" value={to} onChange={e=>setTo(e.target.value)}/></label></div></div><div className="modal-actions"><span/><button className="secondary" onClick={close}>Abbrechen</button><button className="primary" disabled={!name.trim()} onClick={()=>save({id:uid(),name:name.trim(),activeFrom:from,activeTo:to})}>Hinzufügen</button></div></div></div>}
 
