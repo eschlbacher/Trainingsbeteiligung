@@ -16,3 +16,10 @@
 .player-chip svg:last-child{margin-left:auto}
 .player-chip:active{cursor:grabbing}
 @media(max-width:700px){.team-tools{align-items:stretch;flex-direction:column}.team-tools>div{width:100%}.team-tools>div button{flex:1}.team-columns.cols-2,.team-columns.cols-3{grid-template-columns:1fr}.team-box{min-height:90px}.modal-actions .secondary:first-child{width:100%;justify-content:center}}
+
+.team-name-input{min-width:0;width:70%;font:inherit;font-weight:700;background:transparent;border:1px solid transparent;border-radius:8px;padding:6px 8px}
+.team-name-input:focus{border-color:currentColor;outline:none}
+.bulk-delete{white-space:nowrap}
+.selected-row{background:rgba(127,127,127,.08)}
+.toolbar{gap:10px;align-items:center}
+@media(max-width:700px){.toolbar{align-items:stretch;flex-direction:column}.bulk-delete{width:100%;justify-content:center}.team-name-input{width:72%}}
