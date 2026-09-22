@@ -19,34 +19,17 @@ const fmt = (date: string) => new Intl.DateTimeFormat('de-DE', { day: '2-digit',
 const monthName = (date: Date) => new Intl.DateTimeFormat('de-DE', { month: 'long', year: 'numeric' }).format(date);
 const activeOn = (p: Player, date: string) => p.activeFrom <= date && (!p.activeTo || p.activeTo >= date);
 
-const firstNames = ['Lukas','Jonas','Felix','Maximilian','Leon','David','Finn','Paul','Noah','Ben','Elias','Moritz','Julian','Tim','Niklas','Jan','Tom','Fabian','Philipp','Simon','Daniel','Florian','Sebastian','Alexander','Tobias','Marcel','Nico','Robin','Kevin','Dennis','Christian','Johannes','Marco','Patrick','Dominik','Andreas'];
-const lastNames = ['Müller','Schmidt','Schneider','Fischer','Weber','Meyer','Wagner','Becker','Schulz','Hoffmann','Koch','Bauer','Richter','Klein','Wolf','Schröder','Neumann','Schwarz','Zimmermann','Braun','Krüger','Hartmann','Lange','Schmitt','Werner','Schmitz','Krause','Meier','Lehmann','Schmid','Schulze','Maier','Köhler','Herrmann','König','Walter'];
-
-function seedTeam(name: string, offset: number): Team {
-  const start = '2026-07-01', end = '2027-06-30';
-  const players = Array.from({ length: 36 }, (_, i) => ({
-    id: uid(), name: `${firstNames[(i + offset) % firstNames.length]} ${lastNames[(i * 5 + offset) % lastNames.length]}`,
-    activeFrom: start, activeTo: end,
-  }));
-  const dates = ['2026-08-04','2026-08-06','2026-08-11','2026-08-13','2026-08-18','2026-08-20','2026-08-25','2026-08-27','2026-09-01','2026-09-03','2026-09-08','2026-09-10','2026-09-15'];
-  const trainings = dates.map((date, n) => ({
-    id: uid(), date, note: n === 12 ? 'Abschlussspiel und Standards' : '',
-    attendance: Object.fromEntries(players.map((p, i) => [p.id, ((i + n * 3) % 17 === 0 ? 'excused' : (i + n) % 31 === 0 ? 'injured' : 'present') as Status])),
-  }));
-  return { id: uid(), name, season: 'Saison 2026/27', start, end, archived: false, players, trainings };
-}
-
 const createInitial = (): Data => {
-  const teams = [seedTeam('1. Mannschaft', 0), seedTeam('U19', 7), seedTeam('U17', 13)];
-  return { teams, selectedTeamId: teams[0].id };
+  const id = uid();
+  return { teams: [{ id, name: 'Neue Mannschaft', season: 'Saison 2026/27', start: '2026-07-01', end: '2027-06-30', archived: false, players: [], trainings: [], performanceTests: [] }], selectedTeamId: id };
 };
 
 function usePersistentData() {
   const [data, setData] = useState<Data>(() => {
-    try { const saved = localStorage.getItem('trainingsbeteiligung-v1'); return saved ? JSON.parse(saved) : createInitial(); }
+    try { const saved = localStorage.getItem('trainingsbeteiligung-v2'); return saved ? JSON.parse(saved) : createInitial(); }
     catch { return createInitial(); }
   });
-  useEffect(() => localStorage.setItem('trainingsbeteiligung-v1', JSON.stringify(data)), [data]);
+  useEffect(() => localStorage.setItem('trainingsbeteiligung-v2', JSON.stringify(data)), [data]);
   return [data, setData] as const;
 }
 
