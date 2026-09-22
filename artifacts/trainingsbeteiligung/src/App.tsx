@@ -5,11 +5,13 @@ import {
 } from 'lucide-react';
 
 type Status = 'present' | 'excused' | 'unexcused' | 'injured';
-type Player = { id: string; name: string; activeFrom: string; activeTo: string };
+type TestResult = { id: string; date: string; value: number; note: string };
+type PerformanceTest = { id: string; name: string; unit: 'time'|'meters'|'seconds'|'number'; lowerIsBetter: boolean };
+type Player = { id: string; name: string; activeFrom: string; activeTo: string; performance?: Record<string, TestResult[]> };
 type Training = { id: string; date: string; note: string; attendance: Record<string, Status>; teamAssignments?: Record<string, 1|2|3> };
-type Team = { id: string; name: string; season: string; start: string; end: string; archived: boolean; players: Player[]; trainings: Training[] };
+type Team = { id: string; name: string; season: string; start: string; end: string; archived: boolean; players: Player[]; trainings: Training[]; performanceTests?: PerformanceTest[] };
 type Data = { teams: Team[]; selectedTeamId: string };
-type View = 'dashboard' | 'calendar' | 'players' | 'ranking' | 'archive';
+type View = 'dashboard' | 'calendar' | 'players' | 'ranking' | 'performance' | 'archive';
 
 const uid = () => crypto.randomUUID();
 const iso = (date: Date) => date.toISOString().slice(0, 10);
@@ -53,6 +55,7 @@ const nav = [
   { id: 'calendar', label: 'Kalender', icon: CalendarDays },
   { id: 'players', label: 'Spieler', icon: Users },
   { id: 'ranking', label: 'Rangliste', icon: BarChart3 },
+  { id: 'performance', label: 'Leistung', icon: Activity },
   { id: 'archive', label: 'Archiv', icon: Archive },
 ] as const;
 
@@ -64,6 +67,7 @@ function App() {
   const [trainingDate, setTrainingDate] = useState('');
   const [editingTraining, setEditingTraining] = useState<Training | null>(null);
   const [teamBuilderTraining, setTeamBuilderTraining] = useState<Training | null>(null);
+  const [performancePlayer, setPerformancePlayer] = useState<Player | null>(null);
   const [toast, setToast] = useState('');
   const team = data.teams.find(t => t.id === data.selectedTeamId) ?? data.teams[0];
   const notify = (s: string) => { setToast(s); setTimeout(() => setToast(''), 2500); };
@@ -89,8 +93,9 @@ function App() {
         <div className="content">
           {view==='dashboard' && <Dashboard team={team} onOpen={openTraining} onNavigate={setView}/>}
           {view==='calendar' && <CalendarView team={team} onOpen={openTraining}/>}
-          {view==='players' && <PlayersView team={team} onAdd={()=>setModal('player')} updateTeam={updateTeam} notify={notify}/>}
-          {view==='ranking' && <Ranking team={team}/>}
+          {view==='players' && <PlayersView team={team} onAdd={()=>setModal('player')} updateTeam={updateTeam} notify={notify} onPerformance={p=>setPerformancePlayer(p)}/>}
+          {view==='ranking' && <Ranking team={team}/>} 
+          {view==='performance' && <PerformanceView team={team} updateTeam={updateTeam} notify={notify}/>} 
           {view==='archive' && <ArchiveView data={data} team={team} setData={setData} notify={notify}/>}
         </div>
       </main>
@@ -99,6 +104,7 @@ function App() {
       {modal==='teamBuilder' && teamBuilderTraining && <TeamBuilder team={team} training={teamBuilderTraining} close={()=>setModal(null)}/>}
       {modal==='player' && <PlayerModal team={team} close={()=>setModal(null)} save={p=>{updateTeam(t=>({...t,players:[...t.players,p]}));setModal(null);notify('Spieler hinzugefügt');}}/>}
       {modal==='settings' && <SettingsModal team={team} data={data} close={()=>setModal(null)} updateTeam={updateTeam} setData={setData} notify={notify}/>}
+      {performancePlayer && <PerformancePlayerModal team={team} player={performancePlayer} close={()=>setPerformancePlayer(null)} updateTeam={updateTeam} notify={notify}/>} 
       {toast && <div className="toast">{toast}</div>}
     </div>
   );
@@ -127,7 +133,7 @@ function CalendarView({team,onOpen}:{team:Team;onOpen:(d:string,t?:Training)=>vo
 }
 
 function playerStats(team:Team,p:Player){const trs=team.trainings.filter(t=>activeOn(p,t.date));const actual=trs.filter(t=>(t.attendance[p.id]??'present')==='present').length;return{possible:trs.length,actual,rate:trs.length?actual/trs.length*100:0}}
-function PlayersView({team,onAdd,updateTeam,notify}:{team:Team;onAdd:()=>void;updateTeam:(f:(t:Team)=>Team)=>void;notify:(s:string)=>void}) {
+function PlayersView({team,onAdd,updateTeam,notify,onPerformance}:{team:Team;onAdd:()=>void;updateTeam:(f:(t:Team)=>Team)=>void;notify:(s:string)=>void;onPerformance:(p:Player)=>void}) {
   const [search,setSearch]=useState(''); const [selected,setSelected]=useState<string[]>([]);
   const list=team.players.filter(p=>p.name.toLowerCase().includes(search.toLowerCase())).sort((a,b)=>a.name.localeCompare(b.name));
   const toggle=(id:string)=>setSelected(s=>s.includes(id)?s.filter(x=>x!==id):[...s,id]);
@@ -135,7 +141,7 @@ function PlayersView({team,onAdd,updateTeam,notify}:{team:Team;onAdd:()=>void;up
   const removeSelected=()=>{if(selected.length&&confirm(`${selected.length} Spieler wirklich löschen?`)){updateTeam(t=>({...t,players:t.players.filter(p=>!selected.includes(p.id))}));notify(`${selected.length} Spieler gelöscht`);setSelected([])}};
   return <section className="panel"><div className="panel-head"><div><h3>Kader</h3><p>{team.players.length} Spieler · {team.players.filter(p=>activeOn(p,iso(new Date()))).length} aktuell aktiv</p></div><button className="primary" onClick={onAdd}><Plus/> Spieler hinzufügen</button></div>
     <div className="toolbar"><input placeholder="Spieler suchen …" value={search} onChange={e=>setSearch(e.target.value)}/>{selected.length>0&&<button className="delete bulk-delete" onClick={removeSelected}><Trash2 size={17}/> {selected.length} ausgewählte löschen</button>}</div>
-    {team.players.length===0?<Empty text="Noch keine Spieler angelegt. Füge den ersten Spieler hinzu."/>:<div className="table-wrap"><table><thead><tr><th><input type="checkbox" aria-label="Alle auswählen" checked={allVisible} onChange={()=>setSelected(allVisible?selected.filter(id=>!list.some(p=>p.id===id)):[...new Set([...selected,...list.map(p=>p.id)])])}/></th><th>SPIELER</th><th>AKTIV VON</th><th>AKTIV BIS</th><th>STATUS</th><th/></tr></thead><tbody>{list.map(p=><tr key={p.id} className={selected.includes(p.id)?'selected-row':''}><td><input type="checkbox" checked={selected.includes(p.id)} onChange={()=>toggle(p.id)}/></td><td><strong>{p.name}</strong></td><td>{fmt(p.activeFrom)}</td><td>{p.activeTo?fmt(p.activeTo):'offen'}</td><td><span className={`pill ${activeOn(p,iso(new Date()))?'green':'gray'}`}>{activeOn(p,iso(new Date()))?'Aktiv':'Inaktiv'}</span></td><td><button className="icon-btn danger" onClick={()=>{if(confirm(`${p.name} wirklich löschen?`)){updateTeam(t=>({...t,players:t.players.filter(x=>x.id!==p.id)}));notify('Spieler gelöscht')}}}><Trash2 size={17}/></button></td></tr>)}</tbody></table></div>}</section>
+    {team.players.length===0?<Empty text="Noch keine Spieler angelegt. Füge den ersten Spieler hinzu."/>:<div className="table-wrap"><table><thead><tr><th><input type="checkbox" aria-label="Alle auswählen" checked={allVisible} onChange={()=>setSelected(allVisible?selected.filter(id=>!list.some(p=>p.id===id)):[...new Set([...selected,...list.map(p=>p.id)])])}/></th><th>SPIELER</th><th>AKTIV VON</th><th>AKTIV BIS</th><th>STATUS</th><th/></tr></thead><tbody>{list.map(p=><tr key={p.id} className={selected.includes(p.id)?'selected-row':''}><td><input type="checkbox" checked={selected.includes(p.id)} onChange={()=>toggle(p.id)}/></td><td><strong>{p.name}</strong><br/><button className="link" onClick={()=>onPerformance(p)}>Leistungstests</button></td><td>{fmt(p.activeFrom)}</td><td>{p.activeTo?fmt(p.activeTo):'offen'}</td><td><span className={`pill ${activeOn(p,iso(new Date()))?'green':'gray'}`}>{activeOn(p,iso(new Date()))?'Aktiv':'Inaktiv'}</span></td><td><button className="icon-btn danger" onClick={()=>{if(confirm(`${p.name} wirklich löschen?`)){updateTeam(t=>({...t,players:t.players.filter(x=>x.id!==p.id)}));notify('Spieler gelöscht')}}}><Trash2 size={17}/></button></td></tr>)}</tbody></table></div>}</section>
 }
 function Ranking({team}:{team:Team}){const [sort,setSort]=useState<'rate'|'name'|'actual'>('rate');const rows=team.players.map(p=>({p,...playerStats(team,p)})).sort((a,b)=>sort==='name'?a.p.name.localeCompare(b.p.name):b[sort]-a[sort]);return <section className="panel"><div className="panel-head"><div><h3>Spieler-Rangliste</h3><p>Berücksichtigt nur Einheiten innerhalb des Aktivzeitraums</p></div><select value={sort} onChange={e=>setSort(e.target.value as typeof sort)}><option value="rate">Nach Quote</option><option value="actual">Nach Teilnahmen</option><option value="name">Nach Name</option></select></div><div className="table-wrap"><table><thead><tr><th>RANG</th><th>SPIELER</th><th>MÖGLICH</th><th>TEILNAHMEN</th><th>QUOTE</th></tr></thead><tbody>{rows.map((r,i)=><tr key={r.p.id}><td><span className={`rank ${i<3?'top':''}`}>{i+1}</span></td><td><strong>{r.p.name}</strong></td><td>{r.possible}</td><td>{r.actual}</td><td><div className="quote-cell"><strong>{r.rate.toFixed(1).replace('.',',')} %</strong><div><i style={{width:`${r.rate}%`}}/></div></div></td></tr>)}</tbody></table></div></section>}
 
@@ -154,6 +160,19 @@ function TeamBuilder({team,training,close}:{team:Team;training:Training;close:()
     <p className="hint">Bei jedem anwesenden Spieler einfach Team 1, Team 2 oder Team 3 antippen.</p>
     <div className="status-list">{present.map(p=><div className="status-row" key={p.id}><strong>{p.name}</strong><div>{([1,2,3] as const).map(n=><button key={n} className={groups[p.id]===n?'present selected':''} onClick={()=>assign(p.id,n)}>Team {n}</button>)}</div></div>)}</div>
     <div className="modal-actions"><span/><button className="secondary" onClick={close}>Abbrechen</button><button className="primary" onClick={saveTeams}>Fertig</button></div></div></div>
+}
+function performanceValue(t:PerformanceTest,v:number){if(t.unit==='time'){const m=Math.floor(v/60),s=Math.round(v%60);return `${m}:${String(s).padStart(2,'0')}`}return `${v} ${t.unit==='meters'?'m':t.unit==='seconds'?'s':''}`.trim()}
+function PerformancePlayerModal({team,player,close,updateTeam,notify}:{team:Team;player:Player;close:()=>void;updateTeam:(f:(t:Team)=>Team)=>void;notify:(s:string)=>void}){
+ const tests=team.performanceTests??[]; const [testId,setTestId]=useState(tests[0]?.id??''); const [date,setDate]=useState(iso(new Date())); const [raw,setRaw]=useState(''); const [note,setNote]=useState(''); const test=tests.find(t=>t.id===testId); const results=(player.performance?.[testId]??[]).slice().sort((a,b)=>a.date.localeCompare(b.date));
+ const parse=()=>{if(!test)return NaN;if(test.unit==='time'&&raw.includes(':')){const [m,s]=raw.split(':').map(Number);return m*60+s}return Number(raw.replace(',','.'))};
+ const saveResult=()=>{const value=parse();if(!test||!Number.isFinite(value))return;updateTeam(t=>({...t,players:t.players.map(p=>p.id===player.id?{...p,performance:{...(p.performance??{}),[testId]:[...(p.performance?.[testId]??[]),{id:uid(),date,value,note}].slice(-5)}}:p)}));setRaw('');setNote('');notify('Testergebnis gespeichert')};
+ return <div className="modal-wrap"><div className="modal wide"><div className="modal-head"><div><span>LEISTUNGSTESTS</span><h2>{player.name}</h2></div><button className="icon-btn" onClick={close}><X/></button></div>{!tests.length?<div className="hint">Lege zuerst unter „Leistung“ einen Leistungstest an.</div>:<><div className="form"><label>Test<select value={testId} onChange={e=>setTestId(e.target.value)}>{tests.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label><div className="form-row"><label>Datum<input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><label>Wert<input value={raw} onChange={e=>setRaw(e.target.value)} placeholder={test?.unit==='time'?'z. B. 18:57':'Wert'}/></label></div><label>Notiz (optional)<input value={note} onChange={e=>setNote(e.target.value)} placeholder="z. B. nach Verletzung"/></label><button className="primary" disabled={!raw||results.length>=5} onClick={saveResult}>Ergebnis speichern ({results.length}/5)</button></div>{test&&<div className="training-list">{results.map((r,i)=><div className="training-row" key={r.id}><div className="date-badge"><strong>{i+1}</strong><span>Test</span></div><div className="row-main"><strong>{performanceValue(test,r.value)}</strong><span>{fmt(r.date)}{r.note?' · '+r.note:''}</span></div></div>)}</div>}</>}</div></div>
+}
+function PerformanceView({team,updateTeam,notify}:{team:Team;updateTeam:(f:(t:Team)=>Team)=>void;notify:(s:string)=>void}){
+ const tests=team.performanceTests??[]; const [name,setName]=useState(''); const [unit,setUnit]=useState<PerformanceTest['unit']>('time'); const [lower,setLower]=useState(true); const [selected,setSelected]=useState(tests[0]?.id??''); const test=tests.find(t=>t.id===selected)??tests[0];
+ const addTest=()=>{if(!name.trim()||tests.length>=5)return;const nt={id:uid(),name:name.trim(),unit,lowerIsBetter:lower};updateTeam(t=>({...t,performanceTests:[...(t.performanceTests??[]),nt]}));setName('');setSelected(nt.id);notify('Leistungstest angelegt')};
+ const series=test?Array.from({length:5},(_,i)=>{const vals=team.players.map(p=>(p.performance?.[test.id]??[]).slice().sort((a,b)=>a.date.localeCompare(b.date))[i]?.value).filter((v):v is number=>typeof v==='number');return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null}):[];
+ return <><section className="panel"><div className="panel-head"><div><h3>Leistungstests</h3><p>Bis zu 5 eigene Tests · je Spieler maximal 5 Messungen</p></div></div><div className="form-row"><input value={name} onChange={e=>setName(e.target.value)} placeholder="z. B. 5.000-m-Lauf"/><select value={unit} onChange={e=>setUnit(e.target.value as PerformanceTest['unit'])}><option value="time">min:sek</option><option value="meters">Meter</option><option value="seconds">Sekunden</option><option value="number">Zahl / Level</option></select><select value={lower?'lower':'higher'} onChange={e=>setLower(e.target.value==='lower')}><option value="lower">Niedriger ist besser</option><option value="higher">Höher ist besser</option></select><button className="primary" disabled={!name.trim()||tests.length>=5} onClick={addTest}><Plus size={18}/> Test anlegen</button></div>{tests.length>0&&<div className="toolbar"><select value={test?.id??''} onChange={e=>setSelected(e.target.value)}>{tests.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></div>}</section>{test&&<section className="panel"><div className="panel-head"><div><h3>Teamentwicklung · {test.name}</h3><p>Durchschnitt der vorhandenen Spielerwerte je Messung</p></div></div><div style={{display:'flex',alignItems:'end',gap:12,height:220,padding:'20px 10px'}}>{series.map((v,i)=>{const vals=series.filter((x):x is number=>x!==null);const max=Math.max(...vals,1),h=v===null?0:Math.max(12,v/max*170);return <div key={i} style={{flex:1,textAlign:'center'}}><div title={v===null?'Kein Wert':performanceValue(test,v)} style={{height:h,background:'currentColor',opacity:.65,borderRadius:'8px 8px 0 0'}}/><strong>{v===null?'–':performanceValue(test,v)}</strong><small style={{display:'block'}}>Test {i+1}</small></div>})}</div></section>}</>
 }
 function PlayerModal({team,close,save}:{team:Team;close:()=>void;save:(p:Player)=>void}){const[name,setName]=useState(''),[from,setFrom]=useState(team.start),[to,setTo]=useState(team.end);return <div className="modal-wrap"><div className="modal small"><div className="modal-head"><h2>Spieler hinzufügen</h2><button className="icon-btn" onClick={close}><X/></button></div><div className="form"><label>Name<input autoFocus value={name} onChange={e=>setName(e.target.value)} placeholder="Vor- und Nachname"/></label><div className="form-row"><label>Aktiv von<input type="date" value={from} onChange={e=>setFrom(e.target.value)}/></label><label>Aktiv bis<input type="date" value={to} onChange={e=>setTo(e.target.value)}/></label></div></div><div className="modal-actions"><span/><button className="secondary" onClick={close}>Abbrechen</button><button className="primary" disabled={!name.trim()} onClick={()=>save({id:uid(),name:name.trim(),activeFrom:from,activeTo:to})}>Hinzufügen</button></div></div></div>}
 
