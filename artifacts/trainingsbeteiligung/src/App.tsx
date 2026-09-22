@@ -138,7 +138,9 @@ function TrainingModal({team,date,training,close,save,remove,onTeams}:{team:Team
 function TeamBuilder({team,training,close,save}:{team:Team;training:Training;close:()=>void;save:(tr:Training)=>void}) {
  const present=team.players.filter(p=>activeOn(p,training.date)&&(training.attendance[p.id]??'present')==='present').sort((a,b)=>a.name.localeCompare(b.name));
  const legacy=training.teamAssignments??{};
- const initial: [GameForm,GameForm]=training.gameForms??[
+ const initial: [GameForm,GameForm]=training.gameForms
+ ? training.gameForms.map(f=>({...f,assignments:{...f.assignments}})) as [GameForm,GameForm]
+ : [
    {name:'Spielform 1',teamCount:2,assignments:legacy},
    {name:'Spielform 2',teamCount:2,assignments:{}}
  ];
@@ -148,9 +150,10 @@ function TeamBuilder({team,training,close,save}:{team:Team;training:Training;clo
  const assign=(id:string,n:1|2|3)=>patch({assignments:{...form.assignments,[id]:n}});
  const randomize=()=>{const ids=[...present].sort(()=>Math.random()-.5);const a:Record<string,1|2|3>={};ids.forEach((p,i)=>a[p.id]=((i%form.teamCount)+1) as 1|2|3);patch({assignments:a})};
  const setCount=(n:2|3)=>{const a={...form.assignments};Object.keys(a).forEach(id=>{if(a[id]>n)a[id]=((present.findIndex(p=>p.id===id)%n)+1) as 1|2});patch({teamCount:n,assignments:a})};
- const finish=()=>save({...training,gameForms:forms,teamAssignments:forms[0].assignments});
+ const finish=()=>save({...training,gameForms:forms.map(f=>({...f,assignments:{...f.assignments}})) as [GameForm,GameForm],teamAssignments:{...forms[0].assignments}});
+ const switchForm=(n:0|1)=>{ setForms(fs=>fs.map(f=>({...f,assignments:{...f.assignments}})) as [GameForm,GameForm]); setActive(n); };
  return <div className="modal-wrap"><div className="modal wide team-builder"><div className="modal-head"><div><span>TEAMZUSAMMENSTELLUNG</span><h2>2 Spielformen</h2><p>{fmt(training.date)} · {present.length} anwesende Spieler</p></div><button className="icon-btn" onClick={close}><X/></button></div>
-  <div className="game-tabs"><button className={active===0?'active':''} onClick={()=>setActive(0)}>{forms[0].name}</button><button className={active===1?'active':''} onClick={()=>setActive(1)}>{forms[1].name}</button></div>
+  <div className="game-tabs"><button className={active===0?'active':''} onClick={()=>switchForm(0)}>{forms[0].name}</button><button className={active===1?'active':''} onClick={()=>switchForm(1)}>{forms[1].name}</button></div>
   <div className="game-form-tools"><input value={form.name} maxLength={40} onChange={e=>patch({name:e.target.value})} placeholder="Name der Spielform"/><div><button className={form.teamCount===2?'active':''} onClick={()=>setCount(2)}>2 Teams</button><button className={form.teamCount===3?'active':''} onClick={()=>setCount(3)}>3 Teams</button><button onClick={randomize}><Shuffle size={16}/> Mischen</button></div></div>
   <div className="swipe-hint">Spieler zuordnen · nach links wischen für die Teamübersicht →</div>
   <div className="team-builder-pages">
