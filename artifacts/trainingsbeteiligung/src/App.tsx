@@ -8,7 +8,8 @@ type Status = 'present' | 'excused' | 'unexcused' | 'injured';
 type TestResult = { id: string; date: string; value: number; note: string };
 type PerformanceTest = { id: string; name: string; unit: 'time'|'meters'|'seconds'|'number'; lowerIsBetter: boolean };
 type Player = { id: string; name: string; activeFrom: string; activeTo: string; performance?: Record<string, TestResult[]> };
-type Training = { id: string; date: string; note: string; attendance: Record<string, Status>; teamAssignments?: Record<string, 1|2|3> };
+type GameForm = { name: string; teamCount: 2|3; assignments: Record<string,1|2|3> };
+type Training = { id: string; date: string; note: string; attendance: Record<string, Status>; teamAssignments?: Record<string,1|2|3>; gameForms?: [GameForm,GameForm] };
 type Team = { id: string; name: string; season: string; start: string; end: string; archived: boolean; players: Player[]; trainings: Training[]; performanceTests?: PerformanceTest[] };
 type Data = { teams: Team[]; selectedTeamId: string };
 type View = 'dashboard' | 'calendar' | 'players' | 'ranking' | 'performance' | 'archive';
@@ -83,8 +84,8 @@ function App() {
         </div>
       </main>
       <button className="fab" onClick={()=>openTraining(iso(new Date()))}><Plus/> <span>Training</span></button>
-      {modal==='training' && <TrainingModal team={team} date={trainingDate} training={editingTraining} close={()=>setModal(null)} save={tr=>{updateTeam(t=>({...t,trainings: editingTraining?t.trainings.map(x=>x.id===tr.id?tr:x):[...t.trainings,tr]}));setModal(null);notify(editingTraining?'Training aktualisiert':'Training gespeichert');}} remove={editingTraining?()=>{if(confirm('Training wirklich löschen?')){updateTeam(t=>({...t,trainings:t.trainings.filter(x=>x.id!==editingTraining.id)}));setModal(null);notify('Training gelöscht');}}:undefined} onTeams={(tr)=>{setTeamBuilderTraining(tr);setModal('teamBuilder')}}/>}
-      {modal==='teamBuilder' && teamBuilderTraining && <TeamBuilder team={team} training={teamBuilderTraining} close={()=>setModal(null)}/>}
+      {modal==='training' && <TrainingModal team={team} date={trainingDate} training={editingTraining??teamBuilderTraining} close={()=>setModal(null)} save={tr=>{updateTeam(t=>({...t,trainings: editingTraining?t.trainings.map(x=>x.id===tr.id?tr:x):[...t.trainings,tr]}));setTeamBuilderTraining(null);setModal(null);notify(editingTraining?'Training aktualisiert':'Training gespeichert');}} remove={editingTraining?()=>{if(confirm('Training wirklich löschen?')){updateTeam(t=>({...t,trainings:t.trainings.filter(x=>x.id!==editingTraining.id)}));setModal(null);notify('Training gelöscht');}}:undefined} onTeams={(tr)=>{setTeamBuilderTraining(tr);setModal('teamBuilder')}}/>}
+      {modal==='teamBuilder' && teamBuilderTraining && <TeamBuilder team={team} training={teamBuilderTraining} close={()=>setModal('training')} save={tr=>{setTeamBuilderTraining(tr);setModal('training')}}/>}
       {modal==='player' && <PlayerModal team={team} close={()=>setModal(null)} save={p=>{updateTeam(t=>({...t,players:[...t.players,p]}));setModal(null);notify('Spieler hinzugefügt');}}/>}
       {modal==='settings' && <SettingsModal team={team} data={data} close={()=>setModal(null)} updateTeam={updateTeam} setData={setData} notify={notify}/>}
       {performancePlayer && <PerformancePlayerModal team={team} player={performancePlayer} close={()=>setPerformancePlayer(null)} updateTeam={updateTeam} notify={notify}/>} 
@@ -132,17 +133,32 @@ function TrainingModal({team,date,training,close,save,remove,onTeams}:{team:Team
   const active=team.players.filter(p=>activeOn(p,date)).sort((a,b)=>a.name.localeCompare(b.name));
   const [attendance,setAttendance]=useState<Record<string,Status>>(()=>Object.fromEntries(active.map(p=>[p.id,training?.attendance[p.id]??'present'])));
   const [note,setNote]=useState(training?.note??''); const present=active.filter(p=>attendance[p.id]==='present').length;
-  return <div className="modal-wrap"><div className="modal wide"><div className="modal-head"><div><span>{training?'TRAINING BEARBEITEN':'NEUES TRAINING'}</span><h2>{fmt(date)}</h2></div><button className="icon-btn" onClick={close}><X/></button></div><div className="attendance-summary"><div><strong>{present}</strong><span>von {active.length} anwesend</span></div><div className="big-rate">{active.length?Math.round(present/active.length*100):0} %</div></div><div className="hint">Alle Spieler sind zunächst anwesend. Ändere nur die Abwesenden.</div><div className="status-list">{active.map(p=><div className="status-row" key={p.id}><strong>{p.name}</strong><div>{([['present','Anwesend'],['excused','Entschuldigt'],['unexcused','Unentsch.'],['injured','Verletzt']] as [Status,string][]).map(([v,l])=><button key={v} className={`${v} ${attendance[p.id]===v?'selected':''}`} onClick={()=>setAttendance(a=>({...a,[p.id]:v}))}>{l}</button>)}</div></div>)}</div><label className="note-label">Notiz (optional)<textarea maxLength={160} value={note} onChange={e=>setNote(e.target.value)} placeholder="z. B. Schwerpunkt, Besonderheiten …"/></label><div className="modal-actions"><button className="secondary" onClick={()=>onTeams({id:training?.id??uid(),date,note,attendance,teamAssignments:training?.teamAssignments})}><Shuffle size={18}/> Teams zusammenstellen</button>{remove&&<button className="delete" onClick={remove}><Trash2/> Löschen</button>}<span/><button className="secondary" onClick={close}>Abbrechen</button><button className="primary" onClick={()=>save({id:training?.id??uid(),date,note,attendance})}>Training speichern</button></div></div></div>
+  return <div className="modal-wrap"><div className="modal wide"><div className="modal-head"><div><span>{training?'TRAINING BEARBEITEN':'NEUES TRAINING'}</span><h2>{fmt(date)}</h2></div><button className="icon-btn" onClick={close}><X/></button></div><div className="attendance-summary"><div><strong>{present}</strong><span>von {active.length} anwesend</span></div><div className="big-rate">{active.length?Math.round(present/active.length*100):0} %</div></div><div className="hint">Alle Spieler sind zunächst anwesend. Ändere nur die Abwesenden.</div><div className="status-list">{active.map(p=><div className="status-row" key={p.id}><strong>{p.name}</strong><div>{([['present','Anwesend'],['excused','Entschuldigt'],['unexcused','Unentsch.'],['injured','Verletzt']] as [Status,string][]).map(([v,l])=><button key={v} className={`${v} ${attendance[p.id]===v?'selected':''}`} onClick={()=>setAttendance(a=>({...a,[p.id]:v}))}>{l}</button>)}</div></div>)}</div><label className="note-label">Notiz (optional)<textarea maxLength={160} value={note} onChange={e=>setNote(e.target.value)} placeholder="z. B. Schwerpunkt, Besonderheiten …"/></label><div className="modal-actions"><button className="secondary" onClick={()=>onTeams({id:training?.id??uid(),date,note,attendance,teamAssignments:training?.teamAssignments})}><Shuffle size={18}/> Teams zusammenstellen</button>{remove&&<button className="delete" onClick={remove}><Trash2/> Löschen</button>}<span/><button className="secondary" onClick={close}>Abbrechen</button><button className="primary" onClick={()=>save({id:training?.id??uid(),date,note,attendance,gameForms:training?.gameForms,teamAssignments:training?.teamAssignments})}>Training speichern</button></div></div></div>
 }
-function TeamBuilder({team,training,close}:{team:Team;training:Training;close:()=>void}) {
-  const present=team.players.filter(p=>activeOn(p,training.date)&&(training.attendance[p.id]??'present')==='present').sort((a,b)=>a.name.localeCompare(b.name));
-  const [groups,setGroups]=useState<Record<string,1|2|3>>(()=>training.teamAssignments??{});
-  const assign=(id:string,n:1|2|3)=>setGroups(g=>({...g,[id]:n}));
-  const saveTeams=()=>{training.teamAssignments=groups;close()};
-  return <div className="modal-wrap"><div className="modal wide team-builder"><div className="modal-head"><div><span>TEAMZUSAMMENSTELLUNG</span><h2>Teams zusammenstellen</h2><p>{fmt(training.date)} · {present.length} anwesende Spieler</p></div><button className="icon-btn" onClick={close}><X/></button></div>
-    <p className="hint">Bei jedem anwesenden Spieler einfach Team 1, Team 2 oder Team 3 antippen.</p>
-    <div className="status-list">{present.map(p=><div className="status-row" key={p.id}><strong>{p.name}</strong><div>{([1,2,3] as const).map(n=><button key={n} className={groups[p.id]===n?'present selected':''} onClick={()=>assign(p.id,n)}>Team {n}</button>)}</div></div>)}</div>
-    <div className="modal-actions"><span/><button className="secondary" onClick={close}>Abbrechen</button><button className="primary" onClick={saveTeams}>Fertig</button></div></div></div>
+function TeamBuilder({team,training,close,save}:{team:Team;training:Training;close:()=>void;save:(tr:Training)=>void}) {
+ const present=team.players.filter(p=>activeOn(p,training.date)&&(training.attendance[p.id]??'present')==='present').sort((a,b)=>a.name.localeCompare(b.name));
+ const legacy=training.teamAssignments??{};
+ const initial: [GameForm,GameForm]=training.gameForms??[
+   {name:'Spielform 1',teamCount:2,assignments:legacy},
+   {name:'Spielform 2',teamCount:2,assignments:{}}
+ ];
+ const [forms,setForms]=useState<[GameForm,GameForm]>(initial); const [active,setActive]=useState<0|1>(0);
+ const form=forms[active];
+ const patch=(p:Partial<GameForm>)=>setForms(fs=>fs.map((f,i)=>i===active?{...f,...p}:f) as [GameForm,GameForm]);
+ const assign=(id:string,n:1|2|3)=>patch({assignments:{...form.assignments,[id]:n}});
+ const randomize=()=>{const ids=[...present].sort(()=>Math.random()-.5);const a:Record<string,1|2|3>={};ids.forEach((p,i)=>a[p.id]=((i%form.teamCount)+1) as 1|2|3);patch({assignments:a})};
+ const setCount=(n:2|3)=>{const a={...form.assignments};Object.keys(a).forEach(id=>{if(a[id]>n)a[id]=((present.findIndex(p=>p.id===id)%n)+1) as 1|2});patch({teamCount:n,assignments:a})};
+ const finish=()=>save({...training,gameForms:forms,teamAssignments:forms[0].assignments});
+ return <div className="modal-wrap"><div className="modal wide team-builder"><div className="modal-head"><div><span>TEAMZUSAMMENSTELLUNG</span><h2>2 Spielformen</h2><p>{fmt(training.date)} · {present.length} anwesende Spieler</p></div><button className="icon-btn" onClick={close}><X/></button></div>
+  <div className="game-tabs"><button className={active===0?'active':''} onClick={()=>setActive(0)}>{forms[0].name}</button><button className={active===1?'active':''} onClick={()=>setActive(1)}>{forms[1].name}</button></div>
+  <div className="game-form-tools"><input value={form.name} maxLength={40} onChange={e=>patch({name:e.target.value})} placeholder="Name der Spielform"/><div><button className={form.teamCount===2?'active':''} onClick={()=>setCount(2)}>2 Teams</button><button className={form.teamCount===3?'active':''} onClick={()=>setCount(3)}>3 Teams</button><button onClick={randomize}><Shuffle size={16}/> Mischen</button></div></div>
+  <div className="swipe-hint">Spieler zuordnen · nach links wischen für die Teamübersicht →</div>
+  <div className="team-builder-pages">
+   <section className="builder-page"><div className="status-list">{present.map(p=><div className="status-row" key={p.id}><strong>{p.name}</strong><div>{Array.from({length:form.teamCount},(_,i)=>(i+1) as 1|2|3).map(n=><button key={n} className={form.assignments[p.id]===n?'present selected':''} onClick={()=>assign(p.id,n)}>T{n}</button>)}</div></div>)}</div></section>
+   <section className="builder-page team-overview"><h3>{form.name} – Übersicht</h3>{Array.from({length:form.teamCount},(_,i)=>(i+1) as 1|2|3).map(n=><div className="overview-team" key={n}><strong>Team {n}</strong>{present.filter(p=>form.assignments[p.id]===n).map(p=><span key={p.id}>{p.name}</span>)}{!present.some(p=>form.assignments[p.id]===n)&&<em>Noch keine Spieler</em>}</div>)}</section>
+  </div>
+  <div className="modal-actions sticky-actions"><button className="secondary" onClick={close}>Zurück</button><span/><button className="primary" onClick={finish}>Teamaufteilung übernehmen</button></div>
+ </div></div>
 }
 function performanceValue(t:PerformanceTest,v:number){if(t.unit==='time'){const m=Math.floor(v/60),s=Math.round(v%60);return `${m}:${String(s).padStart(2,'0')}`}return `${v} ${t.unit==='meters'?'m':t.unit==='seconds'?'s':''}`.trim()}
 function PerformancePlayerModal({team,player,close,updateTeam,notify}:{team:Team;player:Player;close:()=>void;updateTeam:(f:(t:Team)=>Team)=>void;notify:(s:string)=>void}){
